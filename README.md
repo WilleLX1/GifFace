@@ -7,6 +7,7 @@ GifFace is a lightweight Win32 + GDI+ desktop overlay that displays an animated 
 - Always on top
 - Bounces around the screen
 - Loads GIFs from a HTTP URL
+- Remote trigger through HTTP
 
 Built as a single `.cpp` file and compiled directly with `cl.exe`:
 ```

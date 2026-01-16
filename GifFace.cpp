@@ -15,6 +15,7 @@
 #include <gdiplus.h>
 #include <wininet.h>
 #include <vector>
+#include <string>
 
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "wininet.lib")
@@ -51,6 +52,13 @@ static int     g_stride = 0;
 
 // Temp download path (optional cleanup)
 static wchar_t g_tempGifPath[MAX_PATH]{};
+
+// Control visibility
+static const UINT_PTR g_remoteCheckTimerId = 3;
+static const wchar_t* g_remoteTriggerUrl = L"http://192.168.1.20:9051/download/activate.txt";
+static bool g_faceVisible = false;
+
+
 
 // ----------------------------- Utilities --------------------------------
 
@@ -192,6 +200,36 @@ static void BounceStep()
     if (g_y + g_h > screenH) { g_y = screenH - g_h; g_vy = -g_vy; }
 }
 
+bool RemoteTriggerFileExists()
+{
+    HINTERNET hInet = InternetOpenW(L"GifFaceCheck", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hInet) return false;
+
+    HINTERNET hFile = InternetOpenUrlW(hInet, g_remoteTriggerUrl, nullptr, 0,
+        INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_RELOAD, 0);
+
+    if (!hFile)
+    {
+        InternetCloseHandle(hInet);
+        return false;
+    }
+
+    DWORD statusCode = 0;
+    DWORD size = sizeof(statusCode);
+    if (!HttpQueryInfoW(hFile, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statusCode, &size, nullptr))
+    {
+        InternetCloseHandle(hFile);
+        InternetCloseHandle(hInet);
+        return false;
+    }
+
+    InternetCloseHandle(hFile);
+    InternetCloseHandle(hInet);
+
+    // 200 = exists, 404 = not found
+    return (statusCode == 200);
+}
+
 // WinINet download to a temp file
 static bool DownloadToTempFile(const wchar_t* url, wchar_t* outPath)
 {
@@ -326,6 +364,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         // Start timers
         SetTimer(hwnd, g_gifTimerId, g_delaysMs.empty() ? 100 : g_delaysMs[0], nullptr);
         SetTimer(hwnd, g_moveTimerId, 16, nullptr); // ~60fps movement
+        SetTimer(hwnd, g_remoteCheckTimerId, 5000, nullptr); // check every 5s
 
         // Initial draw (also positions the window)
         RenderLayered(hwnd);
@@ -346,6 +385,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_TIMER:
+        if (wParam == g_remoteCheckTimerId)
+        {
+            bool newState = RemoteTriggerFileExists();
+            if (newState != g_faceVisible)
+            {
+                g_faceVisible = newState;
+                ShowWindow(hwnd, g_faceVisible ? SW_SHOW : SW_HIDE);
+            }
+            return 0;
+        }
         if (wParam == g_gifTimerId && g_gif && g_frameCount > 0)
         {
             g_frameIndex = (g_frameIndex + 1) % g_frameCount;
@@ -419,7 +468,6 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR, int)
         return 0;
     }
 
-    ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
     MSG msg;
